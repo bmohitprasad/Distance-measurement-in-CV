@@ -1,5 +1,6 @@
 import math
 import argparse
+import os
 import cv2
 
 
@@ -129,7 +130,14 @@ if __name__ == "__main__":
         label = f"H:{h_real:.2f}m W:{w_real:.2f}m Dist:{dist:.2f}m"
         cv2.putText(img, label, (int(left_col), int(top_row) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-        cv2.imwrite(args.output, img)
+        output_dir = os.path.dirname(args.output)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+
+        success = cv2.imwrite(args.output, img)
+        if not success:
+            raise IOError(f"Failed to write image to '{args.output}'.")
+
         print(f"Focal length used: {focal_px:.2f} px")
         print(f"Results: Dist={dist:.2f}m, Height={h_real:.2f}m, Width={w_real:.2f}m")
         print(f"Saved to {args.output}")
