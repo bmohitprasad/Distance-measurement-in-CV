@@ -21,7 +21,7 @@ def click_event(event, x, y, flags, params):
         cv2.imshow("Pixel Picker", img)
 
 # Load your image
-image_path = "images/object.jpg" 
+image_path = "images/method_b1_measure/object.jpg" 
 img = cv2.imread(image_path)
 
 if img is None:

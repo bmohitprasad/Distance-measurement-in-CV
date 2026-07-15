@@ -6,14 +6,9 @@ How to Run
 
 Because this method relies on the camera's physical mounting properties, you must know your camera's height and tilt.
 
-python a5_cctv_geometry.py \
-  --row 600 \
-  --height 3.0 \
-  --tilt 20.0 \
-  --focal 800.0 \
-  --cy 360.0 \
-  --image "scene.jpg" \
-  --output "a5_annotated.jpg"
+python3 a5_cctv_geometry.py --pixel-coords '301,405 295,300 281,395 320,394' --height 1.16 --tilt 30.0 --focal-mm 3.67 --sensor-width-mm 4.0 --image-width-px 640 --cy 240 --image images/a5_object.jpg --output output/a5_measurement_result.jpg
+
+
 
 
 Arguments:

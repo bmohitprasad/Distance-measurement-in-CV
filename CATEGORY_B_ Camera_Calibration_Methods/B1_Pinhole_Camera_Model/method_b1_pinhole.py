@@ -77,6 +77,8 @@ HOW TO RUN:
         --calib_dir images/method_b1_calib/ \
         --image images/method_b1_measure/object.jpg --dist 80
 
+        python method_b1_pinhole.py --measure --interactive     --load_calib calib_data.npz     --image images/method_b1_measure/object.jpg --dist 200
+
 PARAMETERS:
     --board_w    : inner corners width of checkerboard (default 9)
     --board_h    : inner corners height (default 6)
@@ -322,7 +324,9 @@ def calibrate(calib_dir, board_w=9, board_h=6, sq_cm=2.5,
             zip(obj_points, img_points, rvecs, tvecs)):
         projected, _ = cv2.projectPoints(
             objp_i, rvec, tvec, camera_matrix, dist_coeffs)
-        err = cv2.norm(imgp_i, projected, cv2.NORM_L2) / len(projected)
+        imgp_flat  = imgp_i.reshape(-1, 2).astype(np.float32)
+        proj_flat  = projected.reshape(-1, 2).astype(np.float32)
+        err = cv2.norm(imgp_flat, proj_flat, cv2.NORM_L2) / len(proj_flat)
         errors.append(err)
 
     mean_error  = np.mean(errors)
@@ -571,16 +575,18 @@ def interactive_select(image_path):
         return None, None
     _pts.clear()
     print("\n  Click P1, then P2 on the image. Press Q when done.\n")
-    cv2.namedWindow("Click two measurement points — press Q when done")
-    cv2.setMouseCallback("Click two measurement points — press Q when done",
-                          _mouse)
+    win_name = "Click two measurement points - press Q when done"
+    cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+    cv2.imshow(win_name, img)
+    cv2.waitKey(1)
+    cv2.setMouseCallback(win_name, _mouse)
     while True:
         disp = img.copy()
         for pt in _pts:
             cv2.circle(disp, pt, 6, (0,80,220), -1)
         if len(_pts) == 2:
             cv2.line(disp, _pts[0], _pts[1], (0,200,80), 2)
-        cv2.imshow("Click two measurement points — press Q when done", disp)
+        cv2.imshow(win_name, disp)
         if cv2.waitKey(1) & 0xFF == ord('q') or len(_pts) == 2:
             break
     cv2.destroyAllWindows()
