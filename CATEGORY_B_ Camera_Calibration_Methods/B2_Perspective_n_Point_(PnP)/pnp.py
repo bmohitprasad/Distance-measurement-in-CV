@@ -328,6 +328,114 @@ def make_demo_scene(out_path="images/method_b4_pnp/demo_scene.jpg",
 
 # ── core PnP solver ────────────────────────────────────────────────────────────
 
+def pixel_to_world_on_plane(pixel_pt, K, D, rvec, tvec):
+    """
+    Given a pixel point known to lie on the Z=0 world plane
+    (same plane as your reference points), back-project it to
+    find its real-world (X, Y, 0) coordinate.
+
+    This lets you measure ANY point in the image once pose is
+    solved from 4+ known reference points on that plane.
+    """
+    R, _ = cv2.Rodrigues(rvec)
+
+    # Undistort the pixel point first
+    pt = np.array([[pixel_pt]], dtype=np.float32)
+    undist_pt = cv2.undistortPoints(pt, K, D, P=K)
+    u, v = undist_pt[0,0]
+
+    # Ray direction in camera coords
+    K_inv = np.linalg.inv(K)
+    ray_cam = K_inv @ np.array([u, v, 1.0])
+
+    # Rotate ray into world coords
+    ray_world = R.T @ ray_cam
+    cam_pos_world = -R.T @ tvec.flatten()
+
+    # Intersect with Z=0 plane:
+    # cam_pos_world[2] + s * ray_world[2] = 0
+    if abs(ray_world[2]) < 1e-8:
+        return None
+    s = -cam_pos_world[2] / ray_world[2]
+    world_pt = cam_pos_world + s * ray_world
+    return world_pt  # [X, Y, 0] in cm
+
+def measure_object_points(image, K, D, rvec, tvec, pixel_points, labels=None):
+    """
+    Measure real-world distances between arbitrary clicked pixel
+    points, using the pose already solved from reference points.
+
+    Args:
+        pixel_points : list of (x,y) pixel coords on the same
+                       plane as your reference points (e.g. A4 sheet)
+        labels        : optional names for each point
+    """
+    if labels is None:
+        labels = [f"O{i+1}" for i in range(len(pixel_points))]
+
+    world_coords = []
+    for pt in pixel_points:
+        w = pixel_to_world_on_plane(pt, K, D, rvec, tvec)
+        world_coords.append(w)
+
+    vis = image.copy()
+    metrics = {"─ Object Points (world coords) ─": ""}
+
+    for i, (px, w) in enumerate(zip(pixel_points, world_coords)):
+        cv2.circle(vis, tuple(map(int,px)), 7, (0,140,255), 2)
+        put_text(vis, labels[i], (int(px[0])+9, int(px[1])-9),
+                 (0,140,255), 0.45)
+        if w is not None:
+            metrics[f"  {labels[i]} pixel"] = f"{px}"
+            metrics[f"  {labels[i]} world (X,Y,cm)"] = f"({w[0]:.3f}, {w[1]:.3f})"
+
+    metrics["─ Object Distances ─"] = ""
+    n = len(pixel_points)
+    for i in range(n):
+        for j in range(i+1, n):
+            if world_coords[i] is not None and world_coords[j] is not None:
+                d = np.linalg.norm(world_coords[i] - world_coords[j])
+                cv2.line(vis, tuple(map(int,pixel_points[i])),
+                         tuple(map(int,pixel_points[j])), (0,220,120), 2)
+                mx = int((pixel_points[i][0]+pixel_points[j][0])/2)
+                my = int((pixel_points[i][1]+pixel_points[j][1])/2) - 10
+                put_text(vis, f"{d:.3f}cm", (mx,my), (0,220,120), 0.5)
+                metrics[f"  {labels[i]}→{labels[j]}"] = f"► {d:.4f} cm"
+
+    save_result(vis, "object_measurement")
+    show_metrics("B4 — Object Measurement (via solved pose)", metrics)
+    return world_coords, metrics
+
+_obj_pts_clicked = []
+
+def _mouse_obj(event, x, y, flags, param):
+    if event == cv2.EVENT_LBUTTONDOWN:
+        _obj_pts_clicked.append((x, y))
+        print(f"  Object point {len(_obj_pts_clicked)}: ({x},{y})")
+
+def interactive_object_points(image_path):
+    img = cv2.imread(image_path)
+    if img is None:
+        return []
+    _obj_pts_clicked.clear()
+    print("\n  Click points on your OBJECT to measure. Press Q when done.\n")
+    win = "Click object points - press Q when done"
+    cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+    cv2.imshow(win, img)
+    cv2.waitKey(1)
+    cv2.setMouseCallback(win, _mouse_obj)
+    while True:
+        disp = img.copy()
+        for i, pt in enumerate(_obj_pts_clicked):
+            cv2.circle(disp, pt, 6, (0,140,255), -1)
+            put_text(disp, f"O{i+1}", (pt[0]+8,pt[1]-8), (0,140,255), 0.4)
+        cv2.imshow(win, disp)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    cv2.destroyAllWindows()
+    return _obj_pts_clicked.copy()
+
+
 SOLVER_MAP = {
     "iterative": cv2.SOLVEPNP_ITERATIVE,
     "epnp":      cv2.SOLVEPNP_EPNP,
@@ -690,8 +798,12 @@ def run_pnp_checkerboard(image_path, board_w, board_h, sq_cm, K, D,
 
 # ── ArUco-based PnP ──────────────────────────────────────────────────────────
 
-def run_pnp_aruco(image_path, marker_cm, K, D, method="ippe"):
-    """Detect ArUco marker and solve PnP using its 4 corners."""
+def run_pnp_aruco(image_path, marker_cm, K, D, method="ippe",
+                   object_pixel_pts=None, interactive_object=False):
+    """Detect ArUco marker and solve PnP using its 4 corners.
+    If object_pixel_pts given (or interactive_object=True), also
+    measures those points on the same plane as the marker.
+    """
     try:
         aruco_dict   = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
         aruco_params = cv2.aruco.DetectorParameters()
@@ -713,18 +825,31 @@ def run_pnp_aruco(image_path, marker_cm, K, D, method="ippe"):
     print(f"  ArUco markers detected: {len(ids)} (IDs: {ids.flatten()})")
 
     # Use first detected marker
-    corners_2d = corners_all[0].reshape(-1,2)   # 4 × 2
-    half = marker_cm / 2.0
+    corners_2d = corners_all[0].reshape(-1,2)   # 4 x 2
+    # OpenCV ArUco corner order is: top-left, top-right,
+    # bottom-right, bottom-left (clockwise, as seen in image).
+    # World points must follow the SAME order for correct pose.
+    s = marker_cm
     world_pts = np.float32([
-        [-half, -half, 0],
-        [ half, -half, 0],
-        [ half,  half, 0],
-        [-half,  half, 0],
+        [0, 0, 0],   # top-left
+        [s, 0, 0],   # top-right
+        [s, s, 0],   # bottom-right
+        [0, s, 0],   # bottom-left
     ])
 
     cv2.aruco.drawDetectedMarkers(img, corners_all, ids)
-    return run_pnp(img, world_pts, corners_2d, K, D,
+    rvec, tvec = run_pnp(img, world_pts, corners_2d, K, D,
                    method=method, label="ArUco PnP")
+
+    # ── measure additional object points using solved pose ─────
+    if rvec is not None:
+        obj_pts = object_pixel_pts
+        if interactive_object:
+            obj_pts = interactive_object_points(image_path)
+        if obj_pts:
+            measure_object_points(img, K, D, rvec, tvec, obj_pts)
+
+    return rvec, tvec
 
 # ── main ───────────────────────────────────────────────────────────────────────
 
@@ -756,6 +881,11 @@ def main():
                     help="3D world points: X1 Y1 Z1 X2 Y2 Z2 ...")
     ap.add_argument("--image_pts", type=float, nargs="+",
                     help="2D image points: u1 v1 u2 v2 ...")
+    ap.add_argument("--object_pts", type=float, nargs="+", default=None,
+                    help="Extra pixel points on the SAME plane to measure "
+                         "(e.g. your object's endpoints): x1 y1 x2 y2 ...")
+    ap.add_argument("--interactive_object", action="store_true",
+                    help="Click object points on image instead of typing them")
 
     args = ap.parse_args()
 
@@ -800,7 +930,14 @@ def main():
 
     # ── ArUco mode ────────────────────────────────────────────────
     elif args.aruco:
-        run_pnp_aruco(args.image, args.marker_cm, K, D, args.method)
+        obj_pixel_pts = None
+        if args.object_pts:
+            flat = args.object_pts
+            obj_pixel_pts = [(flat[i], flat[i+1])
+                              for i in range(0, len(flat)-1, 2)]
+        run_pnp_aruco(args.image, args.marker_cm, K, D, args.method,
+                      object_pixel_pts=obj_pixel_pts,
+                      interactive_object=args.interactive_object)
 
     # ── manual correspondences ────────────────────────────────────
     elif args.manual:
@@ -826,8 +963,20 @@ def main():
         if args.compare_solvers:
             compare_all_solvers(img, world_pts, img_pts, K, D)
         else:
-            run_pnp(img, world_pts, img_pts, K, D,
+            rvec, tvec = run_pnp(img, world_pts, img_pts, K, D,
                     method=args.method, use_ransac=args.ransac)
+
+            # ── measure additional object points on same plane ──────
+            obj_pixel_pts = None
+            if args.interactive_object:
+                obj_pixel_pts = interactive_object_points(args.image)
+            elif args.object_pts:
+                flat = args.object_pts
+                obj_pixel_pts = [(flat[i], flat[i+1])
+                                  for i in range(0, len(flat)-1, 2)]
+
+            if obj_pixel_pts and rvec is not None:
+                measure_object_points(img, K, D, rvec, tvec, obj_pixel_pts)
 
 
 if __name__ == "__main__":
