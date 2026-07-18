@@ -79,6 +79,11 @@ HOW TO RUN:
 
         python method_b1_pinhole.py --measure --interactive     --load_calib calib_data.npz     --image images/method_b1_measure/object.jpg --dist 200
 
+        python method_b1_pinhole.py --measure --interactive \
+    --load_calib calib_data.npz \
+    --image images/method_b1_measure/object.jpg --dist 234
+
+
 PARAMETERS:
     --board_w    : inner corners width of checkerboard (default 9)
     --board_h    : inner corners height (default 6)

@@ -1,4 +1,13 @@
 """
+
+python method_b4_pnp.py --manual \
+    --world_pts  0 0 0   21 0 0   21 29.7 0   0 29.7 0 \
+    --image_pts  <x1> <y1>  <x2> <y2>  <x3> <y3>  <x4> <y4> \
+    --calib calib_data.npz \
+    --image images/method_b4_pnp/object_on_a4.jpg \
+    --interactive_object
+
+    
 METHOD B4: Perspective-n-Point (PnP)
 =======================================
 WHAT IT DOES:
