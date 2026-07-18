@@ -6,6 +6,8 @@ Takes two overlapping images and your camera's intrinsic matrix, and generates
 a 3D point cloud (.ply) of the scene.
 """
 
+# python3 structure_from_motion.py   --img1 "images/left.jpg"   --img2 "images/right.jpg"   --fx 1389.1999   --fy 1387.8080   --cx 963.6   --cy 550.3   --output "my_3d_model.ply"
+
 import cv2
 import numpy as np
 import argparse
