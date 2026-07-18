@@ -16,3 +16,7 @@ Depth from Defocus (DFD) assumes that the "blurriness" of an image is a function
 ### Suggestions:
 * **Why it matters:** This is the math behind "Portrait Mode" on smartphones. The phone detects the depth using a combination of stereo cameras or laser sensors, then applies a Gaussian blur to the "out-of-focus" areas to simulate this DFD effect.
 * **Next Step:** Try taking 3 photos of your car: one focused on the front, one on the middle, and one on the back. Run the script on all three and compare the `c3_sharpness_map.jpg` outputs!
+
+python3 C3_Depth_from_Defocus/c3_depth_from_defocus.py --image "IMG_20260718_114735919.jpg" --output "sharp_048.jpg"
+python3 C3_Depth_from_Defocus/c3_depth_from_defocus.py --image "IMG_20260718_114746191.jpg" --output "sharp_052.jpg"
+python3 C3_Depth_from_Defocus/c3_depth_from_defocus.py --image "IMG_20260718_114753147.jpg" --output "sharp_056.jpg"
